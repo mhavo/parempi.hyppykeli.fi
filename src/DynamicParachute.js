@@ -3,8 +3,25 @@
 import { html } from "htm/preact";
 import { useEffect, useRef } from "preact/hooks";
 import { computed } from "@preact/signals";
-import { LATEST_OBSERVATION, WIND_VARIATIONS } from "./data.js";
+import { WIND_VARIATIONS } from "./data.js"; // LATEST_OBSERVATION ei käytetä tässä tiedostossa
 import { debug } from "./utils.js";
+
+// --- Oletusarvot lataustilalle ---
+const DEFAULT_COLOR = "lightgrey"; // Harmaa väri latauksen aikana
+const DEFAULT_SWING = { angle: 5, duration: 5 }; // Hidas, pieni heilunta
+const DEFAULT_ROTATION = { angle: 0, duration: 0 }; // Ei rotaatiota oletuksena
+// ---
+
+/**
+ * Helper to check if wind variation data is ready and valid.
+ * @type {import("@preact/signals").ReadonlySignal<boolean>}
+ */
+const isDataReady = computed(() => {
+    const variations = WIND_VARIATIONS.value;
+    // Data is ready if variations is an object and has a valid windRef number
+    return !!variations && typeof variations.windRef === "number";
+});
+
 
 /**
  * Calculates common animation parameters based on input factors.
@@ -28,37 +45,34 @@ const calculateAnimationParams = (
 
 /**
  * Computed signal that determines the color of the parachute based on wind variations.
- * Defaults to "#90EE90" if no color is provided in the wind variations data.
- * @type {Signal<string>}
+ * Defaults to DEFAULT_COLOR if data is not ready.
+ * @type {import("@preact/signals").ReadonlySignal<string>}
  */
-const parachuteColor = computed(() => {
-    return WIND_VARIATIONS.value?.color ?? "#90EE90";
+const displayColor = computed(() => {
+    return isDataReady.value
+        ? WIND_VARIATIONS.value?.color ?? DEFAULT_COLOR // Käytä data-väriä tai oletusta jos datasta puuttuu
+        : DEFAULT_COLOR;
 });
 
+
 /**
- * Computed signal that calculates the rotation animation for the parachute based on wind variations.
- * @type {ReadonlySignal<{ angle: number, duration: number }>}
+ * Returns default rotation if data is not ready.
+ * @type {import("@preact/signals").ReadonlySignal<{ angle: number, duration: number }>}
  */
-const rotationAnimation = computed(() => {
-    const windVariations = WIND_VARIATIONS.value;
-    if (!windVariations || typeof windVariations !== "object") {
-        console.error("Invalid windVariations object");
-        return { angle: 0, duration: 0 };
+const displayRotationAnimation = computed(() => {
+    if (!isDataReady.value) {
+        return DEFAULT_ROTATION;
     }
+    // Data is ready, calculate based on WIND_VARIATIONS
+    // Varmistetaan että windVariations on olemassa (vaikka isDataReady tarkistaa sen)
+    const windVariations = WIND_VARIATIONS.value;
+    if (!windVariations) return DEFAULT_ROTATION; // Varmuuden vuoksi
 
-    // XXX windRef is not in windVariation
-    const { variationRange, windRef } = windVariations;
+    // Nyt tiedetään että windVariations ja sen tarvittavat osat ovat olemassa
+    const { variationRange, windRef, maxGust } = windVariations;
 
-    // Calculate rotation angle based on variationRange
-    // Limit the angle to the actual variation range
-    const angle = Math.min(variationRange, 180);
-
-    // Only start rotation when variationRange is significant
-    if (angle < 44) return { angle: 0, duration: 0 };
-
-    // Adjust duration based on windRef and variationRange
-    const baseDuration = Math.max(5 - variationRange * 0.05, 2);
-
+    const angle = Math.min(variationRange ?? 0, 180); // Use nullish coalescing for safety
+    const baseDuration = calculateBaseDuration(variationRange);
     const { angle: calculatedAngle, duration } = calculateAnimationParams(
         angle,
         baseDuration,
@@ -66,30 +80,51 @@ const rotationAnimation = computed(() => {
         windRef,
     );
 
-    debug(
-        `Rotation animation calculated: duration=${duration}, angle=${calculatedAngle}, variationRange=${variationRange}, windRef=${windRef}`,
-    );
-    return { angle: calculatedAngle, duration };
+    logDebugInfo(calculatedAngle, duration, variationRange, windRef);
+
+    // Jos puuska on alle 1, palautetaan kulma 0, mutta kesto säilyy samana
+    // Use nullish coalescing for safety, although check above should prevent null/undefined
+    const finalAngle = (maxGust ?? 0) < 4 ? 0 : calculatedAngle;
+    return { angle: finalAngle, duration };
 });
 
 /**
- * Computed signal that calculates the swing animation for the parachute based on wind variations.
- * @type {ReadonlySignal<{ angle: number, duration: number }>}
+ * @param {number} variationRange
  */
-const swingAnimation = computed(() => {
-    const windVariations = WIND_VARIATIONS.value;
-    if (!windVariations || typeof windVariations !== "object") {
-        console.error("Invalid windVariations object");
-        return { angle: 0, duration: 0 };
-    }
+function calculateBaseDuration(variationRange) {
+    return Math.max(5 - variationRange * 0.05, 2);
+}
 
-    // XXX How this can work? windVarions does not return these values
+/**
+ * @param {number} angle
+ * @param {number} duration
+ * @param {number} variationRange
+ * @param {number} windRef
+ */
+function logDebugInfo(angle, duration, variationRange, windRef) {
+    debug(
+        `Rotation animation calculated: duration=${duration}, angle=${angle}, variationRange=${variationRange}, windRef=${windRef}`,
+    );
+}
+/**
+ * Returns default swing if data is not ready.
+ * @type {import("@preact/signals").ReadonlySignal<{ angle: number, duration: number }>}
+ */
+const displaySwingAnimation = computed(() => {
+    if (!isDataReady.value) {
+        return DEFAULT_SWING;
+    }
+    // Data is ready, calculate based on WIND_VARIATIONS
+    const windVariations = WIND_VARIATIONS.value;
+    if (!windVariations) return DEFAULT_SWING; // Varmuuden vuoksi
+
+    // Nyt tiedetään että windVariations ja sen tarvittavat osat ovat olemassa
     const { averageSpeed, maxGust, windRef } = windVariations;
-    const gustDiff = maxGust - averageSpeed;
+    const gustDiff = Math.max(0, maxGust - averageSpeed); // Varmista ettei ole negatiivinen
 
     // Calculate the base angle and duration for the swing
-    const baseAngle = Math.min(gustDiff * 1.5, 20);
-    const baseDuration = Math.max(3 - gustDiff * 0.15, 1);
+    const baseAngle = Math.min(gustDiff * 2, 35); // gustDiff is guaranteed to be a number
+    const baseDuration = Math.max(2 - gustDiff * 0.15, 1);
 
     const { angle, duration } = calculateAnimationParams(
         baseAngle,
@@ -121,30 +156,40 @@ export function DynamicParachute() {
             const swingContainer = svg.closest(".swing-container");
             const rotateContainer = svg.closest(".rotate-container");
 
-            svg.style.setProperty("--parachute-color", parachuteColor.value);
+            // Käytä displayColor-signaalia
+            svg.style.setProperty("--parachute-color", displayColor.value);
 
             if (swingContainer instanceof HTMLElement) {
-                const { angle, duration } = swingAnimation.value;
+                // Käytä displaySwingAnimation-signaalia
+                const { angle, duration } = displaySwingAnimation.value;
                 swingContainer.style.setProperty(
                     "--swing-angle",
-                    `${angle}deg`,
+                    `${angle}deg`, // Aseta aina kulma, vaikka se olisi 0
                 );
-                swingContainer.style.setProperty(
-                    "--swing-animation",
-                    `swing ${duration}s ease-in-out infinite alternate`,
-                );
-                debug(
-                    `Swing animation applied: ${swingContainer.style.getPropertyValue("--swing-animation")}`,
-                );
+                // Aseta animaatio vain jos kesto > 0
+                if (duration > 0) {
+                    swingContainer.style.setProperty(
+                        "--swing-animation",
+                        `swing ${duration}s ease-in-out infinite alternate`,
+                    );
+                    debug(
+                        `Swing animation applied: ${swingContainer.style.getPropertyValue("--swing-animation")}`,
+                    );
+                } else {
+                    swingContainer.style.removeProperty("--swing-animation");
+                    debug("Swing animation removed (duration 0)");
+                    }
             }
 
             if (rotateContainer instanceof HTMLElement) {
-                const { angle, duration } = rotationAnimation.value;
+                // Käytä displayRotationAnimation-signaalia
+                const { angle, duration } = displayRotationAnimation.value;
                 if (angle > 0 && duration > 0) {
                     rotateContainer.style.setProperty(
                         "--rotate-angle",
-                        `${angle}deg`,
+                        `${angle}deg`, // Aseta aina kulma
                     );
+                    // Aseta --rotate-animation erikseen
                     rotateContainer.style.setProperty(
                         "--rotate-animation",
                         `rotate ${duration}s linear infinite alternate`,
@@ -153,16 +198,17 @@ export function DynamicParachute() {
                         `Rotate animation applied: ${rotateContainer.style.getPropertyValue("--rotate-animation")}`,
                     );
                 } else {
+                    // Poista animaatio jos kulma tai kesto on 0
                     rotateContainer.style.removeProperty("--rotate-animation");
-                }
+                        debug("Rotate animation removed (angle or duration 0)");
+                    }
             }
         }
     }, [
-        parachuteColor.value,
-        LATEST_OBSERVATION.value,
-        WIND_VARIATIONS.value,
-        rotationAnimation.value,
-        swingAnimation.value,
+        // Päivitä riippuvuudet käyttämään uusia display*-signaaleja
+        displayColor.value,
+        displaySwingAnimation.value,
+        displayRotationAnimation.value,
     ]);
 
     return html`
@@ -194,13 +240,18 @@ export function DynamicParachute() {
                 height: 100%;
                 display: inline-block;
                 transform-origin: center top;
-                animation: var(--swing-animation);
+                animation: var(--swing-animation, none); /* Lisää none varmuuden vuoksi */
+                /* Lisää transition transformille pehmeämpää animaation vaihtoa varten */
+                transition: transform 0.5s ease-in-out;
             }
             .dynamic-parachute {
                 width: 100%;
                 height: 100%;
                 fill: var(--parachute-color);
+                /* Lisää transition värille */
+                transition: fill 0.5s ease-in-out;
             }
+            /* .parachute-color luokkaa ei käytetä, voi poistaa jos haluaa */
             .parachute-color {
                 fill: var(--parachute-color);
             }

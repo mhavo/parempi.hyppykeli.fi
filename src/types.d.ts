@@ -1,7 +1,7 @@
-type Signal<T> = import("@preact/signals").Signal<T>;
-type ReadonlySignal<T> = import("@preact/signals").ReadonlySignal<T>;
+export type Signal<T> = import("@preact/signals").Signal<T>;
+export type ReadonlySignal<T> = import("@preact/signals").ReadonlySignal<T>;
 
-interface OpenMeteoWeatherData {
+export interface OpenMeteoWeatherData {
     latitude: number;
     longitude: number;
     generationtime_ms: number;
@@ -13,7 +13,7 @@ interface OpenMeteoWeatherData {
     hourly: OpenMeteoHourlyData;
 }
 
-interface OpenMeteoHourlyUnits {
+export interface OpenMeteoHourlyUnits {
     time: string;
     windspeed_1000hPa: string;
     windspeed_925hPa: string;
@@ -27,9 +27,9 @@ interface OpenMeteoHourlyUnits {
     winddirection_600hPa: string;
 }
 
-type OpenMeteoPressureLevel = "1000" | "925" | "850" | "700" | "600";
+export type OpenMeteoPressureLevel = "1000" | "925" | "850" | "700" | "600";
 
-interface OpenMeteoHourlyData {
+export interface OpenMeteoHourlyData {
     time: string[];
     windspeed_1000hPa: number[];
     windspeed_925hPa: number[];
@@ -43,7 +43,7 @@ interface OpenMeteoHourlyData {
     winddirection_600hPa: number[];
 }
 
-interface FormattedTableData {
+export interface FormattedTableData {
     pressureLevels: {
         pressure: string;
         height: string;
@@ -52,14 +52,14 @@ interface FormattedTableData {
     tomorrowData: Record<string, AverageWindSpeeds>;
 }
 
-type AverageWindSpeeds = {
+export type AverageWindSpeeds = {
     [key: string]: {
         speed: number | null;
         direction: number | null;
     };
 };
 
-type OpenMeteoDayData = Record<
+export type OpenMeteoDayData = Record<
     string,
     {
         data: AverageWindSpeeds;
@@ -70,8 +70,8 @@ type OpenMeteoDayData = Record<
 /**
  * Interface representing weather data.
  */
-interface WeatherData {
-    source: "metar" | "fmi" | "roads" | "forecast" | "mock";
+export interface WeatherData {
+    source: "fmi" | "roads" | "forecast" | "mock" | "metar"; // Added "metar"
     gust?: number;
     speed?: number;
     direction?: number;
@@ -86,7 +86,7 @@ interface WeatherData {
 /**
  * Interface representing a cloud layer.
  */
-interface CloudLayer {
+export interface CloudLayer {
     base: number;
     amount: string;
     unit: string;
@@ -96,9 +96,9 @@ interface CloudLayer {
 /**
  * Interface representing METAR data.
  */
-interface MetarData {
+export interface MetarData {
     clouds: CloudLayer[];
-    temperature: number;
+    temperature?: number; // Made optional
     dewpoint?: number;
     wind: {
         direction: number | "VRB";
@@ -115,7 +115,7 @@ interface MetarData {
 /**
  * Interface representing query parameters.
  */
-interface QueryParams {
+export interface QueryParams {
     __gusts?: string;
     __speeds?: string;
     __directions?: string;
@@ -140,17 +140,18 @@ interface QueryParams {
 /**
  * FMI stored query names
  */
-type StoredQuery =
+export type StoredQuery =
     | "fmi::avi::observations::iwxxm"
     | "fmi::observations::weather::timevaluepair"
     | "fmi::forecast::edited::weather::scandinavia::point::timevaluepair";
 
-interface FlykMetar {
+// --- FlykMetar Types ---
+export interface FlykMetar {
     type: string;
     features: FlykMetarFeature[];
 }
 
-interface FlykMetarFeature {
+export interface FlykMetarFeature {
     type: string;
     geometry: FlykMetarGeometry;
     properties: FlykMetarProperties;
@@ -192,8 +193,9 @@ interface FlykMetarProperties {
     textOffset: number[];
     iconImage: string;
 }
+// --- End FlykMetar Types ---
 
-interface MetarJSResponse {
+export interface MetarJSResponse {
     type: "METAR";
     correction: boolean;
     station: string;
@@ -225,7 +227,7 @@ interface MetarJSResponse {
     altimeterInHpa: number;
 }
 
-interface RoadSensorValue {
+export interface RoadSensorValue {
     id: number;
     stationId: number;
     name: string;
@@ -235,26 +237,20 @@ interface RoadSensorValue {
     unit: string;
 }
 
-interface RoadStationObservations {
+export interface RoadStationObservations {
     id: number;
     dataUpdatedTime: string;
     sensorValues: RoadSensorValue[];
 }
 
-interface RoadStationHistory {
-    id: string;
-    dataUpdatedTime: string;
-    values: RoadStationHistoryValue[];
-}
-
-interface RoadStationHistoryValue {
-    id: number;
-    stationId: number;
+export interface RoadStationHistoryValue {
+    roadStationId: number;
+    sensorId: number;
+    sensorValue: number;
     measuredTime: string;
-    value: number;
 }
 
-interface RoadStations {
+export interface RoadStations {
     type: string;
     dataUpdatedTime: string;
     features: {
@@ -273,7 +269,7 @@ interface RoadStations {
         };
     }[];
 }
-interface RoadStationInfoDetailed {
+export interface RoadStationInfoDetailed {
     type: string;
     id: number;
     geometry: {
@@ -319,3 +315,6 @@ interface RoadStationInfoDetailed {
 
 declare module "metar" {}
 declare function parseMETAR(metarString: string): MetarJSResponse;
+
+// Add this export to make the file a module
+export {};
